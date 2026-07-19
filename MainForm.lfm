@@ -1,9 +1,10 @@
-object frmShortcutTray: TfrmShortcutTray
-  Left = 300
+object frmIMStart: TfrmIMStart
+  Left = 840
   Height = 240
-  Top = 200
+  Top = 343
   Width = 320
-  Caption = 'ShortcutTray'
+  Caption = 'IM Start Menu'
+  Position = poScreenCenter
   LCLVersion = '4.99.0.0'
   OnCreate = FormCreate
   OnDestroy = FormDestroy

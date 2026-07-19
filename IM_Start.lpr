@@ -1,4 +1,4 @@
-program ShortcutTray;
+program IM_Start;
 
 {$mode objfpc}{$H+}
 
@@ -17,6 +17,6 @@ begin
   Application.Scaled := True;
   Application.Initialize;
   Application.ShowMainForm := False;
-  Application.CreateForm(TfrmShortcutTray, frmShortcutTray);
+  Application.CreateForm(TfrmIMStart, frmIMStart);
   Application.Run;
 end.

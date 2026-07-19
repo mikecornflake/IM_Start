@@ -50,9 +50,9 @@ Type
     WorkDir: String;
   End;
 
-  { TfrmShortcutTray }
+  { TfrmIMStart }
 
-  TfrmShortcutTray = Class(TForm)
+  TfrmIMStart = Class(TForm)
     ilShortcuts: TImageList;
     pmShortcuts: TPopupMenu;
     TrayIcon: TTrayIcon;
@@ -68,7 +68,9 @@ Type
     Procedure AddSeparatorToMenu(Const AMenu: String);
     Function ExpandShortcutTokens(Const AText: String): String;
     Function ExtractExeAndParams(Const ALine: String; out AExe, AParams: String): Boolean;
+    Function FindOrCreateChildMenu(AParent: TMenuItem; Const ACaption: String): TMenuItem;
     Function FindOrCreateFolderMenu(Const AFolder: String): TMenuItem;
+    Function FindOrCreateTopLevelMenu(Const ACaption: String): TMenuItem;
     Function FolderNameForShortcut(Const AExe: String): String;
     Procedure AddShortcutToMenu(Const AMenu, ACaption, AExe, AParams: String);
     Procedure LoadShortcuts;
@@ -77,13 +79,14 @@ Type
     Procedure OpenShortcutsFile(Sender: TObject);
     Procedure DoAbout(Sender: TObject);
     Procedure ReloadShortcuts(Sender: TObject);
+    Procedure EditShortcuts(Sender: TObject);
     Procedure ExitApp(Sender: TObject);
     Procedure SetTrayIcon(AImageIndex: Integer);
   Public
   End;
 
 Var
-  frmShortcutTray: TfrmShortcutTray;
+  frmIMStart: TfrmIMStart;
 
 Const
   ICON_TRAY_ENABLED = 11;
@@ -94,16 +97,23 @@ Implementation
 {$R *.lfm}
 
 Uses
-  StrUtils, OSSupport, FileSupport, StringSupport, FormAbout, Graphics;
+  StrUtils, OSSupport, FileSupport, StringSupport, FormAbout, Graphics,
+  FormEditor,
+  // Here to hopefully activate the TabPage in FormAbout
+  ffmpegSupport, ImageMagickSupport, LibmpvSupport, netMCSupport,
+  TesseractSupport, XPDFSupport, qpdfSupport;
 
-  { TfrmShortcutTray }
+  { TfrmIMStart }
 
-Procedure TfrmShortcutTray.FormCreate(Sender: TObject);
+Procedure TfrmIMStart.FormCreate(Sender: TObject);
 Begin
+  // TODO: Why isn't this being set from Project Options?
+  Application.Title := 'Inspector Mike Start Menu';
+
   FShortcutInfos := TFPObjectList.Create(True);
   FShortcutsFile := AppendPathDelim(ExtractFilePath(Application.ExeName)) + 'shortcuts.txt';
 
-  TrayIcon.Hint := 'Shortcut Tray';
+  TrayIcon.Hint := 'IM Start Menu';
   TrayIcon.Visible := True;
 
   FTokens := TStringList.Create;
@@ -112,15 +122,25 @@ Begin
 
   RebuildMenu;
   FMenuShowing := False;
+
+  // As IM_Start is the launch point for all IM apps, we should indicate
+  // which support libraries are available in the About dialog
+  InitializeFFmpeg;
+  InitializeImageMagick;
+  FindLibmpvDLL;
+  InitializenetMC;
+  InitializeTesseract;
+  InitializeXPDF;
+  Initializeqpdf;
 End;
 
-Procedure TfrmShortcutTray.FormDestroy(Sender: TObject);
+Procedure TfrmIMStart.FormDestroy(Sender: TObject);
 Begin
   FreeAndNil(FTokens);
   FreeAndNil(FShortcutInfos);
 End;
 
-Procedure TfrmShortcutTray.TrayIconClick(Sender: TObject);
+Procedure TfrmIMStart.TrayIconClick(Sender: TObject);
 Var
   P: TPoint;
 Begin
@@ -144,7 +164,7 @@ Begin
   End;
 End;
 
-Procedure TfrmShortcutTray.SetTrayIcon(AImageIndex: Integer);
+Procedure TfrmIMStart.SetTrayIcon(AImageIndex: Integer);
 Var
   LIcon: TIcon;
 Begin
@@ -157,7 +177,86 @@ Begin
   End;
 End;
 
-Function TfrmShortcutTray.ExpandShortcutTokens(Const AText: String): String;
+//------------------
+Procedure TfrmIMStart.LoadShortcuts;
+Var
+  sl: TStringList;
+  i, p: Integer;
+  Line, SectionName, CaptionText, CommandText: String;
+  ExeName, Params: String;
+Begin
+  FShortcutInfos.Clear;
+  FTokens.Clear;
+
+  If Not FileExistsUTF8(FShortcutsFile) Then
+    Exit;
+
+  sl := TStringList.Create;
+  Try
+    sl.LoadFromFile(FShortcutsFile);
+
+    SectionName := 'Shortcuts';
+
+    For i := 0 To sl.Count - 1 Do
+    Begin
+      Line := ExpandFile(Trim(sl[i]));
+
+      If Line = '' Then
+        Continue;
+
+      If (Line[1] = '#') Or (Line[1] = ';') Then
+        Continue;
+
+      If (Line[1] = '[') And (Line[Length(Line)] = ']') Then
+      Begin
+        SectionName := Trim(Copy(Line, 2, Length(Line) - 2));
+
+        // Normalize separators
+        SectionName := StringReplace(SectionName, '/', '\', [rfReplaceAll]);
+
+        Continue;
+      End;
+
+      If SameText(SectionName, 'Tokens') Then
+      Begin
+        p := Pos('=', Line);
+        If p > 0 Then
+          FTokens.Values[Trim(Copy(Line, 1, p - 1))] :=
+            Trim(Copy(Line, p + 1, MaxInt));
+        Continue;
+      End;
+
+      If Line = '-' Then
+      Begin
+        AddSeparatorToMenu(SectionName);
+        Continue;
+      End;
+
+      p := Pos('=', Line);
+
+      If p > 0 Then
+      Begin
+        CaptionText := Trim(Copy(Line, 1, p - 1));
+        CommandText := Trim(Copy(Line, p + 1, MaxInt));
+      End
+      Else
+      Begin
+        CaptionText := '';
+        CommandText := Line;
+      End;
+
+      CommandText := ExpandShortcutTokens(CommandText);
+
+      If ExtractExeAndParams(CommandText, ExeName, Params) Then
+        AddShortcutToMenu(SectionName, CaptionText, ExeName, Params);
+    End;
+
+  Finally
+    sl.Free;
+  End;
+End;
+
+Function TfrmIMStart.ExpandShortcutTokens(Const AText: String): String;
 Var
   i: Integer;
   TokenName, TokenValue: String;
@@ -177,8 +276,7 @@ Begin
   End;
 End;
 
-Function TfrmShortcutTray.ExtractExeAndParams(Const ALine: String;
-  out AExe, AParams: String): Boolean;
+Function TfrmIMStart.ExtractExeAndParams(Const ALine: String; out AExe, AParams: String): Boolean;
 Var
   s: String;
   p: SizeInt;
@@ -220,7 +318,7 @@ Begin
   Result := AExe <> '';
 End;
 
-Function TfrmShortcutTray.FolderNameForShortcut(Const AExe: String): String;
+Function TfrmIMStart.FolderNameForShortcut(Const AExe: String): String;
 Var
   PathPart: String;
   Parts: TStringList;
@@ -250,21 +348,70 @@ Begin
   End;
 End;
 
-Function TfrmShortcutTray.FindOrCreateFolderMenu(Const AFolder: String): TMenuItem;
+Function TfrmIMStart.FindOrCreateFolderMenu(Const AFolder: String): TMenuItem;
+Var
+  slParts: TStringList;
+  i: Integer;
+  oParent, oChild: TMenuItem;
+Begin
+  slParts := TStringList.Create;
+  Try
+    slParts.Delimiter := '\';
+    slParts.StrictDelimiter := True;
+    slParts.DelimitedText := AFolder;
+
+    oParent := nil;
+
+    For i := 0 To slParts.Count - 1 Do
+    Begin
+      If oParent = nil Then
+      Begin
+        // Top-level menu
+        oParent := FindOrCreateTopLevelMenu(slParts[i]);
+      End
+      Else
+      Begin
+        // Submenu under oParent
+        oChild := FindOrCreateChildMenu(oParent, slParts[i]);
+        oParent := oChild;
+      End;
+    End;
+
+    Result := oParent;
+  Finally
+    slParts.Free;
+  End;
+End;
+
+Function TfrmIMStart.FindOrCreateTopLevelMenu(Const ACaption: String): TMenuItem;
 Var
   i: Integer;
 Begin
   For i := 0 To pmShortcuts.Items.Count - 1 Do
-    If SameText(pmShortcuts.Items[i].Caption, AFolder) Then
+    If SameText(pmShortcuts.Items[i].Caption, ACaption) Then
       Exit(pmShortcuts.Items[i]);
 
   Result := TMenuItem.Create(pmShortcuts);
-  Result.Caption := AFolder;
+  Result.Caption := ACaption;
   Result.ImageIndex := 1;
   pmShortcuts.Items.Add(Result);
 End;
 
-Procedure TfrmShortcutTray.AddSeparatorToMenu(Const AMenu: String);
+Function TfrmIMStart.FindOrCreateChildMenu(AParent: TMenuItem; Const ACaption: String): TMenuItem;
+Var
+  i: Integer;
+Begin
+  For i := 0 To AParent.Count - 1 Do
+    If SameText(AParent.Items[i].Caption, ACaption) Then
+      Exit(AParent.Items[i]);
+
+  Result := TMenuItem.Create(pmShortcuts);
+  Result.Caption := ACaption;
+  Result.ImageIndex := 1;
+  AParent.Add(Result);
+End;
+
+Procedure TfrmIMStart.AddSeparatorToMenu(Const AMenu: String);
 Var
   FolderMenu, Item: TMenuItem;
 Begin
@@ -278,7 +425,7 @@ Begin
   FolderMenu.Add(Item);
 End;
 
-Procedure TfrmShortcutTray.AddShortcutToMenu(Const AMenu, ACaption, AExe, AParams: String);
+Procedure TfrmIMStart.AddShortcutToMenu(Const AMenu, ACaption, AExe, AParams: String);
 Var
   Info: TShortcutInfo;
   FolderMenu, Item: TMenuItem;
@@ -329,83 +476,9 @@ Begin
   FolderMenu.Add(Item);
 End;
 
-Procedure TfrmShortcutTray.LoadShortcuts;
+Procedure TfrmIMStart.RebuildMenu;
 Var
-  sl: TStringList;
-  i, p: Integer;
-  Line, SectionName, CaptionText, CommandText: String;
-  ExeName, Params: String;
-Begin
-  FShortcutInfos.Clear;
-  FTokens.Clear;
-
-  If Not FileExistsUTF8(FShortcutsFile) Then
-    Exit;
-
-  sl := TStringList.Create;
-  Try
-    sl.LoadFromFile(FShortcutsFile);
-
-    SectionName := 'Shortcuts';
-
-    For i := 0 To sl.Count - 1 Do
-    Begin
-      Line := ExpandFile(Trim(sl[i]));
-
-      If Line = '' Then
-        Continue;
-
-      If (Line[1] = '#') Or (Line[1] = ';') Then
-        Continue;
-
-      If (Line[1] = '[') And (Line[Length(Line)] = ']') Then
-      Begin
-        SectionName := Trim(Copy(Line, 2, Length(Line) - 2));
-        Continue;
-      End;
-
-      If SameText(SectionName, 'Tokens') Then
-      Begin
-        p := Pos('=', Line);
-        If p > 0 Then
-          FTokens.Values[Trim(Copy(Line, 1, p - 1))] :=
-            Trim(Copy(Line, p + 1, MaxInt));
-        Continue;
-      End;
-
-      If Line = '-' Then
-      Begin
-        AddSeparatorToMenu(SectionName);
-        Continue;
-      End;
-
-      p := Pos('=', Line);
-
-      If p > 0 Then
-      Begin
-        CaptionText := Trim(Copy(Line, 1, p - 1));
-        CommandText := Trim(Copy(Line, p + 1, MaxInt));
-      End
-      Else
-      Begin
-        CaptionText := '';
-        CommandText := Line;
-      End;
-
-      CommandText := ExpandShortcutTokens(CommandText);
-
-      If ExtractExeAndParams(CommandText, ExeName, Params) Then
-        AddShortcutToMenu(SectionName, CaptionText, ExeName, Params);
-    End;
-
-  Finally
-    sl.Free;
-  End;
-End;
-
-Procedure TfrmShortcutTray.RebuildMenu;
-Var
-  Item: TMenuItem;
+  Item, mnuApp: TMenuItem;
 Begin
   SetTrayIcon(ICON_TRAY_DISABLED);
   Try
@@ -424,44 +497,59 @@ Begin
     Item.Caption := '-';
     pmShortcuts.Items.Add(Item);
 
+    mnuApp := TMenuItem.Create(pmShortcuts);
+    mnuApp.Caption := 'IM Start';
+    mnuApp.ImageIndex := 11;
+    pmShortcuts.Items.Add(mnuApp);
+
     Item := TMenuItem.Create(pmShortcuts);
     Item.Caption := 'About';
     Item.OnClick := @DoAbout;
     Item.ImageIndex := 11;
-    pmShortcuts.Items.Add(Item);
+    mnuApp.Add(Item);
 
     Item := TMenuItem.Create(pmShortcuts);
     Item.Caption := '-';
-    pmShortcuts.Items.Add(Item);
+    mnuApp.Add(Item);
 
     Item := TMenuItem.Create(pmShortcuts);
-    Item.Caption := 'Reload shortcuts';
-    Item.OnClick := @ReloadShortcuts;
-    Item.ImageIndex := 9;
-    pmShortcuts.Items.Add(Item);
+    Item.Caption := 'Edit shortcuts';
+    Item.OnClick := @EditShortcuts;
+    Item.ImageIndex := 3;
+    mnuApp.Add(Item);
+
+    Item := TMenuItem.Create(pmShortcuts);
+    Item.Caption := '-';
+    mnuApp.Add(Item);
 
     Item := TMenuItem.Create(pmShortcuts);
     Item.Caption := 'Open shortcuts.txt';
     Item.OnClick := @OpenShortcutsFile;
     Item.Enabled := FileExistsUTF8(FShortcutsFile);
     Item.ImageIndex := 3;
-    pmShortcuts.Items.Add(Item);
+    mnuApp.Add(Item);
+
+    Item := TMenuItem.Create(pmShortcuts);
+    Item.Caption := 'Reload shortcuts';
+    Item.OnClick := @ReloadShortcuts;
+    Item.ImageIndex := 9;
+    mnuApp.Add(Item);
 
     Item := TMenuItem.Create(pmShortcuts);
     Item.Caption := '-';
-    pmShortcuts.Items.Add(Item);
+    mnuApp.Add(Item);
 
     Item := TMenuItem.Create(pmShortcuts);
     Item.Caption := 'Exit';
     Item.OnClick := @ExitApp;
     Item.ImageIndex := 10;
-    pmShortcuts.Items.Add(Item);
+    mnuApp.Add(Item);
   Finally
     SetTrayIcon(ICON_TRAY_ENABLED);
   End;
 End;
 
-Procedure TfrmShortcutTray.RunShortcut(Sender: TObject);
+Procedure TfrmIMStart.RunShortcut(Sender: TObject);
 Var
   Info: TShortcutInfo;
 Begin
@@ -480,22 +568,36 @@ Begin
     LaunchDocument(Info.ExeName);
 End;
 
-Procedure TfrmShortcutTray.OpenShortcutsFile(Sender: TObject);
+Procedure TfrmIMStart.OpenShortcutsFile(Sender: TObject);
 Begin
   LaunchDocument(FShortcutsFile);
 End;
 
-Procedure TfrmShortcutTray.DoAbout(Sender: TObject);
+Procedure TfrmIMStart.DoAbout(Sender: TObject);
 Begin
   FormAbout.ShowAbout;
 End;
 
-Procedure TfrmShortcutTray.ReloadShortcuts(Sender: TObject);
+Procedure TfrmIMStart.ReloadShortcuts(Sender: TObject);
 Begin
   RebuildMenu;
 End;
 
-Procedure TfrmShortcutTray.ExitApp(Sender: TObject);
+Procedure TfrmIMStart.EditShortcuts(Sender: TObject);
+Var
+  frmEditor: TfrmEditor;
+Begin
+  frmEditor := TfrmEditor.Create(Self);
+  frmEditor.Filename := FShortcutsFile;
+  Try
+    If frmEditor.ShowModal = mrOk Then
+      RebuildMenu;
+  Finally
+    frmEditor.Free;
+  End;
+End;
+
+Procedure TfrmIMStart.ExitApp(Sender: TObject);
 Begin
   Application.Terminate;
 End;

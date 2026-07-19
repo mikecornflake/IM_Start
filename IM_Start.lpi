@@ -10,10 +10,14 @@
         <MainUnitHasScaledStatement Value="False"/>
       </Flags>
       <SessionStorage Value="InProjectDir"/>
-      <Title Value="ShortcutTray"/>
+      <Title Value="Inspector Mike Start Menu"/>
       <Scaled Value="True"/>
       <ResourceType Value="res"/>
       <UseXPManifest Value="True"/>
+      <XPManifest>
+        <TextName Value="InspectorMike.IM_Suite.IM_Start"/>
+        <TextDesc Value="Inspector Mike Start Menu"/>
+      </XPManifest>
       <Icon Value="0"/>
     </General>
     <VersionInfo>
@@ -32,6 +36,12 @@
     </RunParams>
     <RequiredPackages>
       <Item>
+        <PackageName Value="SynEditDsgn"/>
+      </Item>
+      <Item>
+        <PackageName Value="SynEdit"/>
+      </Item>
+      <Item>
         <PackageName Value="IM_forms"/>
       </Item>
       <Item>
@@ -46,11 +56,17 @@
     </RequiredPackages>
     <Units>
       <Unit>
-        <Filename Value="ShortcutTray.lpr"/>
+        <Filename Value="IM_Start.lpr"/>
       </Unit>
       <Unit>
         <Filename Value="MainForm.pas"/>
-        <ComponentName Value="frmShortcutTray"/>
+        <ComponentName Value="frmIMStart"/>
+        <HasResources Value="True"/>
+        <ResourceBaseClass Value="Form"/>
+      </Unit>
+      <Unit>
+        <Filename Value="FormEditor.pas"/>
+        <ComponentName Value="frmEditor"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
       </Unit>
@@ -59,7 +75,7 @@
   <CompilerOptions>
     <Version Value="11"/>
     <Target>
-      <Filename Value="$(TestDir)/$NameOnly($(ProjFile))/$NameOnly($(ProjFile))"/>
+      <Filename Value="$(TestDir)/$NameOnly($(ProjFile))/IM_Start"/>
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir)"/>

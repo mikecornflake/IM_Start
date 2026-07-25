@@ -100,10 +100,9 @@ Implementation
 
 Uses
   StrUtils, OSSupport, FileSupport, StringSupport, FormAbout, Graphics,
-  FormEditor,
+  FormEditor, ThirdPartySupport,
   // Here to hopefully activate the TabPage in FormAbout
-  ffmpegSupport, ImageMagickSupport, LibmpvSupport, netMCSupport,
-  TesseractSupport, XPDFSupport, qpdfSupport, PopplerSupport;
+  ffmpegSupport, LibmpvSupport, TesseractSupport, XPDFSupport, qpdfSupport, PopplerSupport;
 
   { TfrmIMStart }
 
@@ -130,14 +129,18 @@ Begin
 
   // As IM_Start is the launch point for all IM apps, we should indicate
   // which support libraries are available in the About dialog
-  InitializeFFmpeg;
-  InitializeImageMagick;
-  FindLibmpvDLL;
-  InitializenetMC;
-  InitializeTesseract;
-  InitializeXPDF;
-  Initializeqpdf;
-  InitializePoppler;
+
+  // These are all lazy singletons, IncludeAttribution is an empty call
+  // to enforce creation
+  QPDF.IncludeAttribution;
+  Poppler.IncludeAttribution;
+  LibmpvDLL.IncludeAttribution;
+  XPDF.IncludeAttribution;
+  Tesseract.IncludeAttribution;
+  FFmpeg.IncludeAttribution;
+
+  // These items are always available, but only shown when specifically called out
+  ThirdParties.Include([THIRDPARTY_IMAGEMAGICK]);
 End;
 
 Procedure TfrmIMStart.FormDestroy(Sender: TObject);
@@ -221,6 +224,8 @@ Begin
       Begin
         SectionName := Trim(Copy(Line, 2, Length(Line) - 2));
 
+        TrayIcon.Hint := SectionName;
+
         // Normalize separators
         SectionName := StringReplace(SectionName, '/', '\', [rfReplaceAll]);
 
@@ -264,6 +269,8 @@ Begin
   Finally
     sl.Free;
   End;
+
+  TrayIcon.Hint := Application.Title;
 End;
 
 Function TfrmIMStart.ExpandShortcutTokens(Const AText: String): String;

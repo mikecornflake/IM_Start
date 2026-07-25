@@ -3,7 +3,7 @@ object frmEditor: TfrmEditor
   Height = 638
   Top = 191
   Width = 1009
-  BorderIcons = [biSystemMenu]
+  BorderIcons = [biSystemMenu, biMaximize]
   Caption = 'Shortcut Editor'
   ClientHeight = 638
   ClientWidth = 1009

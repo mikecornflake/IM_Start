@@ -36,6 +36,9 @@
     </RunParams>
     <RequiredPackages>
       <Item>
+        <PackageName Value="IM_units.LazSerial"/>
+      </Item>
+      <Item>
         <PackageName Value="IM_forms.media.mpv"/>
       </Item>
       <Item>

@@ -101,8 +101,9 @@ Implementation
 Uses
   StrUtils, OSSupport, FileSupport, StringSupport, FormAbout, Graphics,
   FormEditor, ThirdPartySupport,
-  // Here to hopefully activate the TabPage in FormAbout
-  ffmpegSupport, LibmpvSupport, TesseractSupport, XPDFSupport, qpdfSupport, PopplerSupport;
+  // Here to activate the TabPage in FormAbout
+  ffmpegSupport, LibmpvSupport, TesseractSupport, XPDFSupport, qpdfSupport, PopplerSupport,
+  LazSerialSupport;
 
   { TfrmIMStart }
 
@@ -130,8 +131,8 @@ Begin
   // As IM_Start is the launch point for all IM apps, we should indicate
   // which support libraries are available in the About dialog
 
-  // These are all lazy singletons, IncludeAttribution is an empty call
-  // to enforce creation
+  // These next are all lazy singletons:
+  // IncludeAttribution is an empty call to enforce creation
   QPDF.IncludeAttribution;
   Poppler.IncludeAttribution;
   LibmpvDLL.IncludeAttribution;
@@ -139,8 +140,10 @@ Begin
   Tesseract.IncludeAttribution;
   FFmpeg.IncludeAttribution;
 
-  // These items are always available, but only shown when specifically called out
-  ThirdParties.Include([THIRDPARTY_IMAGEMAGICK]);
+  // These items are always available, but only only shown when specifically
+  // Included
+  ThirdParties.Include([THIRDPARTY_LAZSERIAL, THIRDPARTY_IMAGEMAGICK,
+    THIRDPARTY_ZEOS, THIRDPARTY_BGRABITMAP, THIRDPARTY_TURBOPOWER_IPRO, THIRDPARTY_WGS84]);
 End;
 
 Procedure TfrmIMStart.FormDestroy(Sender: TObject);

@@ -1,8 +1,8 @@
-program IM_Start;
+Program IM_Start;
 
 {$mode objfpc}{$H+}
 
-uses
+Uses
   {$IFDEF UNIX}
   cthreads,
   {$ENDIF}
@@ -10,13 +10,13 @@ uses
   Forms,
   MainForm;
 
-{$R *.res}
+  {$R *.res}
 
-begin
+Begin
   RequireDerivedFormResource := True;
   Application.Scaled := True;
   Application.Initialize;
   Application.ShowMainForm := False;
   Application.CreateForm(TfrmIMStart, frmIMStart);
   Application.Run;
-end.
+End.

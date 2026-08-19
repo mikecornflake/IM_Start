@@ -143,15 +143,18 @@
     <Units>
       <Unit>
         <Filename Value="IM_Start.lpr"/>
+        <IsPartOfProject Value="True"/>
       </Unit>
       <Unit>
         <Filename Value="MainForm.pas"/>
+        <IsPartOfProject Value="True"/>
         <ComponentName Value="frmIMStart"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>
       </Unit>
       <Unit>
         <Filename Value="FormEditor.pas"/>
+        <IsPartOfProject Value="True"/>
         <ComponentName Value="frmEditor"/>
         <HasResources Value="True"/>
         <ResourceBaseClass Value="Form"/>

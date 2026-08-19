@@ -14,7 +14,9 @@ Unit MainForm;
     Mike Thompson (mike.cornflake@gmail.com)
 
   History
-    01/07/2026: Creattion
+    19/08/2026: Completion of human code review
+    01/07/2026: Creation - largely ChatGPT with Mike providing functional
+                           testing - no code review
 
   License
     This library is free software: you can redistribute it and/or modify it
@@ -66,22 +68,31 @@ Type
     FShortcutsFile: String;
     FShortcutInfos: TFPObjectList;
     FMenuShowing: Boolean;
-    Procedure AddSeparatorToMenu(Const AMenu: String);
+
+    // Menu Building Helper routines
     Function ExpandShortcutTokens(Const AText: String): String;
-    Function ExtractExeAndParams(Const ALine: String; out AExe, AParams: String): Boolean;
-    Function FindOrCreateChildMenu(AParent: TMenuItem; Const ACaption: String): TMenuItem;
+    Function ExtractExeAndParams(Const ALine: String;
+      out AExe, AParams: String): Boolean;
     Function FindOrCreateFolderMenu(Const AFolder: String): TMenuItem;
-    Function FindOrCreateTopLevelMenu(Const ACaption: String): TMenuItem;
-    Function FolderNameForShortcut(Const AExe: String): String;
+    Procedure AddSeparatorToMenu(Const AMenu: String);
     Procedure AddShortcutToMenu(Const AMenu, ACaption, AExe, AParams: String);
+
+    // Primary routines
     Procedure LoadShortcuts;
     Procedure RebuildMenu;
+
+    // User clicks shortcut menu
     Procedure RunShortcut(Sender: TObject);
+    // Edit the Shortcut file externally
     Procedure OpenShortcutsFile(Sender: TObject);
+
+    // Application menu items
     Procedure DoAbout(Sender: TObject);
     Procedure ReloadShortcuts(Sender: TObject);
     Procedure EditShortcuts(Sender: TObject);
     Procedure ExitApp(Sender: TObject);
+
+    // Allow shortcut Icon to toggle disabled while loading...
     Procedure SetTrayIcon(AImageIndex: Integer);
   Public
   End;
@@ -92,7 +103,9 @@ Var
 Const
   ICON_TRAY_ENABLED = 11;
   ICON_TRAY_DISABLED = 12;
+  ICON_FOLDER = 1;
   ICON_IE = 13;
+  SECTION_DEFAULT = 'Shortcuts';
 
 Implementation
 
@@ -102,7 +115,8 @@ Uses
   StrUtils, OSSupport, FileSupport, StringSupport, FormAbout, Graphics,
   FormEditor, ThirdPartySupport,
   // Here to activate the TabPage in FormAbout
-  ffmpegSupport, LibmpvSupport, TesseractSupport, XPDFSupport, qpdfSupport, PopplerSupport,
+  ffmpegSupport, LibmpvSupport, TesseractSupport, XPDFSupport, qpdfSupport,
+  PopplerSupport,
   LazSerialSupport;
 
   { TfrmIMStart }
@@ -113,7 +127,8 @@ Begin
   Application.Title := 'Inspector Mike Start Menu';
 
   FShortcutInfos := TFPObjectList.Create(True);
-  FShortcutsFile := AppendPathDelim(ExtractFilePath(Application.ExeName)) + 'shortcuts.txt';
+  FShortcutsFile := AppendPathDelim(ExtractFilePath(Application.ExeName)) +
+    'shortcuts.txt';
 
   TrayIcon.Hint := 'IM Start Menu';
   TrayIcon.Visible := True;
@@ -143,7 +158,8 @@ Begin
   // These items are always available, but only only shown when specifically
   // Included
   ThirdParties.Include([THIRDPARTY_LAZSERIAL, THIRDPARTY_IMAGEMAGICK,
-    THIRDPARTY_ZEOS, THIRDPARTY_BGRABITMAP, THIRDPARTY_TURBOPOWER_IPRO, THIRDPARTY_WGS84]);
+    THIRDPARTY_ZEOS, THIRDPARTY_BGRABITMAP, THIRDPARTY_TURBOPOWER_IPRO,
+    THIRDPARTY_WGS84]);
 End;
 
 Procedure TfrmIMStart.FormDestroy(Sender: TObject);
@@ -193,9 +209,9 @@ End;
 Procedure TfrmIMStart.LoadShortcuts;
 Var
   sl: TStringList;
-  i, p: Integer;
-  Line, SectionName, CaptionText, CommandText: String;
-  ExeName, Params: String;
+  i, iIndex: Integer;
+  sLine, sSectionName, sCaptionText, sCommandText: String;
+  sExeName, sParams, sLeft, sRight: String;
 Begin
   // Remove dynamically added icons
   While ilShortcuts.Count > FShortcutImageCount Do
@@ -204,69 +220,86 @@ Begin
   FShortcutInfos.Clear;
   FTokens.Clear;
 
-  If Not FileExistsUTF8(FShortcutsFile) Then
+  If Not FileExists(FShortcutsFile) Then
     Exit;
 
   sl := TStringList.Create;
   Try
     sl.LoadFromFile(FShortcutsFile);
 
-    SectionName := 'Shortcuts';
+    // In case the user never defines a section...
+    sSectionName := SECTION_DEFAULT;
 
     For i := 0 To sl.Count - 1 Do
     Begin
-      Line := ExpandFile(Trim(sl[i]));
+      sLine := ExpandFile(Trim(sl[i]));
 
-      If Line = '' Then
+      // Skip blank lines
+      If sLine = '' Then
         Continue;
 
-      If (Line[1] = '#') Or (Line[1] = ';') Then
+      // Skip comments
+      If (sLine[1] = '#') Or (sLine[1] = ';') Then
         Continue;
 
-      If (Line[1] = '[') And (Line[Length(Line)] = ']') Then
+      // Define section heading (may be nested ie "section\subsection"
+      If (sLine[1] = '[') And (sLine[Length(sLine)] = ']') Then
       Begin
-        SectionName := Trim(Copy(Line, 2, Length(Line) - 2));
+        sSectionName := Trim(Copy(sLine, 2, Length(sLine) - 2));
 
-        TrayIcon.Hint := SectionName;
+        // Let the user know what we are currently loading
+        // This is temporary
+        TrayIcon.Hint := sSectionName;
 
         // Normalize separators
-        SectionName := StringReplace(SectionName, '/', '\', [rfReplaceAll]);
+        sSectionName := StringReplace(sSectionName, '/', '\', [rfReplaceAll]);
 
         Continue;
       End;
 
-      If SameText(SectionName, 'Tokens') Then
+      // Build up the tokens
+      // These need to be defined early in the Shortcuts file, we only parse the file once
+      If SameText(sSectionName, 'Tokens') Then
       Begin
-        p := Pos('=', Line);
-        If p > 0 Then
-          FTokens.Values[Trim(Copy(Line, 1, p - 1))] :=
-            Trim(Copy(Line, p + 1, MaxInt));
+        iIndex := Pos('=', sLine);
+
+        If iIndex > 0 Then
+        Begin
+          sLeft := Trim(Copy(sLine, 1, iIndex - 1));
+          sRight := Trim(Copy(sLine, iIndex + 1, MaxInt));
+
+          FTokens.Values[sLeft] := sRight;
+        End;
+
         Continue;
       End;
 
-      If Line = '-' Then
+      // Add seperator
+      If sLine = '-' Then
       Begin
-        AddSeparatorToMenu(SectionName);
+        AddSeparatorToMenu(sSectionName);
         Continue;
       End;
 
-      p := Pos('=', Line);
+      // What's left must be shortcut, try and load this...
+      iIndex := Pos('=', sLine);
 
-      If p > 0 Then
+      If iIndex > 0 Then
       Begin
-        CaptionText := Trim(Copy(Line, 1, p - 1));
-        CommandText := Trim(Copy(Line, p + 1, MaxInt));
+        sCaptionText := Trim(Copy(sLine, 1, iIndex - 1));
+        sCommandText := Trim(Copy(sLine, iIndex + 1, MaxInt));
       End
       Else
       Begin
-        CaptionText := '';
-        CommandText := Line;
+        sCaptionText := '';
+        sCommandText := sLine;
       End;
 
-      CommandText := ExpandShortcutTokens(CommandText);
+      sCommandText := ExpandShortcutTokens(sCommandText);
 
-      If ExtractExeAndParams(CommandText, ExeName, Params) Then
-        AddShortcutToMenu(SectionName, CaptionText, ExeName, Params);
+      // Only add the shortcut to the menu if it's valid
+      If ExtractExeAndParams(sCommandText, sExeName, sParams) Then
+        AddShortcutToMenu(sSectionName, sCaptionText, sExeName, sParams);
     End;
 
   Finally
@@ -279,7 +312,7 @@ End;
 Function TfrmIMStart.ExpandShortcutTokens(Const AText: String): String;
 Var
   i: Integer;
-  TokenName, TokenValue: String;
+  sTokenName, sTokenValue: String;
 Begin
   Result := AText;
 
@@ -287,19 +320,20 @@ Begin
 
   For i := 0 To FTokens.Count - 1 Do
   Begin
-    TokenName := Trim(FTokens.Names[i]);
-    TokenValue := Trim(FTokens.ValueFromIndex[i]);
+    sTokenName := Trim(FTokens.Names[i]);
+    sTokenValue := Trim(FTokens.ValueFromIndex[i]);
 
-    If TokenName <> '' Then
-      Result := StringReplace(Result, '<' + TokenName + '>', TokenValue,
-        [rfReplaceAll, rfIgnoreCase]);
+    If sTokenName <> '' Then
+      Result := StringReplace(Result, '<' + sTokenName + '>',
+        sTokenValue, [rfReplaceAll, rfIgnoreCase]);
   End;
 End;
 
-Function TfrmIMStart.ExtractExeAndParams(Const ALine: String; out AExe, AParams: String): Boolean;
+Function TfrmIMStart.ExtractExeAndParams(Const ALine: String;
+  out AExe, AParams: String): Boolean;
 Var
   s: String;
-  p: SizeInt;
+  P: SizeInt;
 Begin
   Result := False;
   AExe := '';
@@ -315,60 +349,45 @@ Begin
 
   If s[1] = '"' Then
   Begin
-    p := PosEx('"', s, 2);
-    If p = 0 Then
+    P := PosEx('"', s, 2);
+    If P = 0 Then
       Exit;
 
-    AExe := Copy(s, 2, p - 2);
-    AParams := Trim(Copy(s, p + 1, MaxInt));
+    AExe := Copy(s, 2, P - 2);
+    AParams := Trim(Copy(s, P + 1, MaxInt));
   End
   Else
   Begin
     // Fallback for unquoted paths with no spaces.
-    p := Pos(' ', s);
-    If p = 0 Then
+    P := Pos(' ', s);
+    If P = 0 Then
       AExe := s
     Else
     Begin
-      AExe := Copy(s, 1, p - 1);
-      AParams := Trim(Copy(s, p + 1, MaxInt));
+      AExe := Copy(s, 1, P - 1);
+      AParams := Trim(Copy(s, P + 1, MaxInt));
     End;
   End;
 
   Result := AExe <> '';
 End;
 
-Function TfrmIMStart.FolderNameForShortcut(Const AExe: String): String;
-Var
-  PathPart: String;
-  Parts: TStringList;
-Begin
-  Result := 'Other';
-
-  PathPart := ExtractFilePath(AExe);
-  PathPart := StringReplace(PathPart, '/', '\', [rfReplaceAll]);
-  PathPart := StringReplace(PathPart, ExtractFileDrive(PathPart), '', []);
-  PathPart := TrimSet(PathPart, ['\']);
-
-  If PathPart = '' Then
-    Exit;
-
-  Parts := TStringList.Create;
-  Try
-    Parts.Delimiter := '\';
-    Parts.StrictDelimiter := True;
-    Parts.DelimitedText := PathPart;
-
-    If Parts.Count = 1 Then
-      Result := Parts[0]
-    Else If Parts.Count > 1 Then
-      Result := Parts[0] + '\' + Parts[1];
-  Finally
-    Parts.Free;
-  End;
-End;
-
 Function TfrmIMStart.FindOrCreateFolderMenu(Const AFolder: String): TMenuItem;
+
+  Function FindOrCreateChildMenu(AParent: TMenuItem; Const ACaption: String): TMenuItem;
+  Var
+    i: Integer;
+  Begin
+    For i := 0 To AParent.Count - 1 Do
+      If SameText(AParent.Items[i].Caption, ACaption) Then
+        Exit(AParent.Items[i]);
+
+    Result := TMenuItem.Create(pmShortcuts);
+    Result.Caption := ACaption;
+    Result.ImageIndex := ICON_FOLDER;
+    AParent.Add(Result);
+  End;
+
 Var
   slParts: TStringList;
   i: Integer;
@@ -387,7 +406,7 @@ Begin
       If oParent = nil Then
       Begin
         // Top-level menu
-        oParent := FindOrCreateTopLevelMenu(slParts[i]);
+        oParent := FindOrCreateChildMenu(pmShortcuts.Items, slParts[i]);
       End
       Else
       Begin
@@ -401,34 +420,6 @@ Begin
   Finally
     slParts.Free;
   End;
-End;
-
-Function TfrmIMStart.FindOrCreateTopLevelMenu(Const ACaption: String): TMenuItem;
-Var
-  i: Integer;
-Begin
-  For i := 0 To pmShortcuts.Items.Count - 1 Do
-    If SameText(pmShortcuts.Items[i].Caption, ACaption) Then
-      Exit(pmShortcuts.Items[i]);
-
-  Result := TMenuItem.Create(pmShortcuts);
-  Result.Caption := ACaption;
-  Result.ImageIndex := 1;
-  pmShortcuts.Items.Add(Result);
-End;
-
-Function TfrmIMStart.FindOrCreateChildMenu(AParent: TMenuItem; Const ACaption: String): TMenuItem;
-Var
-  i: Integer;
-Begin
-  For i := 0 To AParent.Count - 1 Do
-    If SameText(AParent.Items[i].Caption, ACaption) Then
-      Exit(AParent.Items[i]);
-
-  Result := TMenuItem.Create(pmShortcuts);
-  Result.Caption := ACaption;
-  Result.ImageIndex := 1;
-  AParent.Add(Result);
 End;
 
 Procedure TfrmIMStart.AddSeparatorToMenu(Const AMenu: String);
@@ -446,17 +437,17 @@ Begin
 End;
 
 // TODO FileSupport?
-Function IsURL(Const S: String): Boolean;
+Function IsURL(Const AInput: String): Boolean;
 Begin
   Result :=
-    S.StartsWith('http://', True) Or S.StartsWith('https://', True) Or
-    S.StartsWith('sharepoint:', True);
+    AInput.StartsWith('http://', True) Or AInput.StartsWith('https://', True) Or
+    AInput.StartsWith('sharepoint:', True);
 End;
 
 Procedure TfrmIMStart.AddShortcutToMenu(Const AMenu, ACaption, AExe, AParams: String);
 Var
-  Info: TShortcutInfo;
-  FolderMenu, Item: TMenuItem;
+  oInfo: TShortcutInfo;
+  oFolderMenu, oItem: TMenuItem;
   bFile, bFolder, bURL: Boolean;
   icoTemp: TIcon;
 Begin
@@ -467,62 +458,107 @@ Begin
   If Not bFile And Not bFolder And Not bURL Then
     Exit;
 
-  Info := TShortcutInfo.Create;
-  Info.MenuName := AMenu;
-  Info.ExeName := AExe;
-  Info.Params := AParams;
+  oInfo := TShortcutInfo.Create;
+  oInfo.MenuName := AMenu;
+  oInfo.ExeName := AExe;
+  oInfo.Params := AParams;
 
   If bURL Then
-    Info.WorkDir := ''   // URLs have no working directory
+    oInfo.WorkDir := ''   // URLs have no working directory
   Else
-    Info.WorkDir := ExtractFilePath(AExe);
+    oInfo.WorkDir := ExtractFilePath(AExe);
 
   If Trim(ACaption) <> '' Then
-    Info.Caption := Trim(ACaption)
+    oInfo.Caption := Trim(ACaption)
   Else
-    Info.Caption := ExtractFileNameOnly(AExe);
+    oInfo.Caption := ExtractFileNameOnly(AExe);
 
-  FShortcutInfos.Add(Info);
+  FShortcutInfos.Add(oInfo);
 
   If Trim(AMenu) <> '' Then
-    FolderMenu := FindOrCreateFolderMenu(AMenu)
+    oFolderMenu := FindOrCreateFolderMenu(AMenu)
   Else
-    FolderMenu := FindOrCreateFolderMenu('Other');
+    oFolderMenu := FindOrCreateFolderMenu(SECTION_DEFAULT);
 
-  Item := TMenuItem.Create(pmShortcuts);
+  oItem := TMenuItem.Create(pmShortcuts);
   If Trim(ACaption) <> '' Then
-    Item.Caption := Trim(ACaption)
+    oItem.Caption := Trim(ACaption)
   Else
-    Item.Caption := ExtractFileNameOnly(AExe);
+    oItem.Caption := ExtractFileNameOnly(AExe);
 
-  Item.Hint := AExe + ' ' + AParams;
-  Item.Tag := PtrInt(Info);
-  Item.OnClick := @RunShortcut;
+  oItem.Hint := AExe + ' ' + AParams;
+  oItem.Tag := PtrInt(oInfo);
+  oItem.OnClick := @RunShortcut;
 
   If bURL Then
-    Item.ImageIndex := ICON_IE
+    oItem.ImageIndex := ICON_IE
   Else
   Begin
     icoTemp := GetShellSmallIcon(AExe);
     Try
       If Assigned(icoTemp) Then
-        Item.ImageIndex := ilShortcuts.AddIcon(icoTemp);
+        oItem.ImageIndex := ilShortcuts.AddIcon(icoTemp);
     Finally
       icoTemp.Free;
     End;
   End;
 
-  FolderMenu.Add(Item);
+  oFolderMenu.Add(oItem);
 End;
 
 Procedure TfrmIMStart.RebuildMenu;
+
+  Function HasUsefulChildren(AMenu: TMenuItem): Boolean;
+  Var
+    i: Integer;
+  Begin
+    Result := False;
+
+    For i := 0 To AMenu.Count - 1 Do
+      If AMenu.Items[i].Caption <> '-' Then
+        Exit(True);
+  End;
+
+  // Dynamic loading can leave empty section menus when their files
+  // do not exist. Remove those unused sections recursively.
+  Procedure ClearUnusedMenuItems(AParent: TMenuItem);
+  Var
+    oMenu: TMenuItem;
+    i: Integer;
+  Begin
+    For i := AParent.Count - 1 Downto 0 Do
+    Begin
+      oMenu := AParent.Items[i];
+
+      If oMenu.Caption = '-' Then
+        Continue;
+
+      // First remove any empty folders below this one
+      ClearUnusedMenuItems(oMenu);
+
+      // Then this folder may itself have become empty
+      If (oMenu.ImageIndex = ICON_FOLDER) And (Not HasUsefulChildren(oMenu)) Then
+      Begin
+        AParent.Delete(i);
+        oMenu.Free;
+      End;
+    End;
+  End;
+
 Var
   Item, mnuApp: TMenuItem;
 Begin
   SetTrayIcon(ICON_TRAY_DISABLED);
   Try
     pmShortcuts.Items.Clear;
+
+    // Parses the full Shortcuts file once, but doesn't load shortcuts for
+    // files that don't exist
     LoadShortcuts;
+
+    // This clears Menu Sections that were created from the Shortcuts file, but which
+    // didn't have any valid shortcuts loaded
+    ClearUnusedMenuItems(pmShortcuts.Items);
 
     If FShortcutInfos.Count = 0 Then
     Begin
@@ -532,6 +568,7 @@ Begin
       pmShortcuts.Items.Add(Item);
     End;
 
+    // Now add the application menus
     Item := TMenuItem.Create(pmShortcuts);
     Item.Caption := '-';
     pmShortcuts.Items.Add(Item);
@@ -564,7 +601,7 @@ Begin
     Item := TMenuItem.Create(pmShortcuts);
     Item.Caption := 'Open shortcuts.txt';
     Item.OnClick := @OpenShortcutsFile;
-    Item.Enabled := FileExistsUTF8(FShortcutsFile);
+    Item.Enabled := FileExists(FShortcutsFile);
     Item.ImageIndex := 3;
     mnuApp.Add(Item);
 
@@ -590,21 +627,21 @@ End;
 
 Procedure TfrmIMStart.RunShortcut(Sender: TObject);
 Var
-  Info: TShortcutInfo;
+  oInfo: TShortcutInfo;
 Begin
   If Not (Sender Is TMenuItem) Then
     Exit;
 
-  Info := TShortcutInfo(TMenuItem(Sender).Tag);
-  If Not Assigned(Info) Then
+  oInfo := TShortcutInfo(TMenuItem(Sender).Tag);
+  If Not Assigned(oInfo) Then
     Exit;
 
-  If DirectoryExists(Info.ExeName) Then
-    LaunchDocument(Info.ExeName)
-  Else If SameText(ExtractFileExt(Info.ExeName), '.exe') Then
-    LaunchExternalTool(Info.ExeName, Info.Params)
+  If DirectoryExists(oInfo.ExeName) Then
+    LaunchDocument(oInfo.ExeName)
+  Else If SameText(ExtractFileExt(oInfo.ExeName), '.exe') Then
+    LaunchExternalTool(oInfo.ExeName, oInfo.Params)
   Else
-    LaunchDocument(Info.ExeName);
+    LaunchDocument(oInfo.ExeName);
 End;
 
 Procedure TfrmIMStart.OpenShortcutsFile(Sender: TObject);

@@ -15,7 +15,7 @@
       <ResourceType Value="res"/>
       <UseXPManifest Value="True"/>
       <XPManifest>
-        <TextName Value="InspectorMike.IM_Suite.IM_Start"/>
+        <TextName Value="InspectorMike.IM.Suite.IM_Start"/>
         <TextDesc Value="Inspector Mike Start Menu"/>
       </XPManifest>
       <Icon Value="0"/>
@@ -116,10 +116,10 @@
     </RunParams>
     <RequiredPackages>
       <Item>
-        <PackageName Value="IM_units.LazSerial"/>
+        <PackageName Value="IM.units.LazSerial"/>
       </Item>
       <Item>
-        <PackageName Value="IM_forms.media.mpv"/>
+        <PackageName Value="IM.forms.media.mpv"/>
       </Item>
       <Item>
         <PackageName Value="SynEditDsgn"/>
@@ -128,10 +128,10 @@
         <PackageName Value="SynEdit"/>
       </Item>
       <Item>
-        <PackageName Value="IM_forms"/>
+        <PackageName Value="IM.forms"/>
       </Item>
       <Item>
-        <PackageName Value="IM_units"/>
+        <PackageName Value="IM.units"/>
       </Item>
       <Item>
         <PackageName Value="LCL"/>

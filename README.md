@@ -1,4 +1,4 @@
-# Inspector Mike Portable Start Menu
+# IM_Start: Inspector Mike Portable Start Menu
 
 **IM_Start** is a lightweight Lazarus/LCL system tray application
 that provides quick access to your favourite applications, folders 

@@ -71,8 +71,7 @@ Type
 
     // Menu Building Helper routines
     Function ExpandShortcutTokens(Const AText: String): String;
-    Function ExtractExeAndParams(Const ALine: String;
-      out AExe, AParams: String): Boolean;
+    Function ExtractExeAndParams(Const ALine: String; out AExe, AParams: String): Boolean;
     Function FindOrCreateFolderMenu(Const AFolder: String): TMenuItem;
     Procedure AddSeparatorToMenu(Const AMenu: String);
     Procedure AddShortcutToMenu(Const AMenu, ACaption, AExe, AParams: String);
@@ -127,8 +126,7 @@ Begin
   Application.Title := 'Inspector Mike Start Menu';
 
   FShortcutInfos := TFPObjectList.Create(True);
-  FShortcutsFile := AppendPathDelim(ExtractFilePath(Application.ExeName)) +
-    'shortcuts.txt';
+  FShortcutsFile := AppendPathDelim(ExtractFilePath(Application.ExeName)) + 'shortcuts.txt';
 
   TrayIcon.Hint := 'IM Start Menu';
   TrayIcon.Visible := True;
@@ -158,8 +156,7 @@ Begin
   // These items are always available, but only only shown when specifically
   // Included
   ThirdParties.Include([THIRDPARTY_LAZSERIAL, THIRDPARTY_IMAGEMAGICK,
-    THIRDPARTY_ZEOS, THIRDPARTY_BGRABITMAP, THIRDPARTY_TURBOPOWER_IPRO,
-    THIRDPARTY_WGS84]);
+    THIRDPARTY_ZEOS, THIRDPARTY_BGRABITMAP, THIRDPARTY_TURBOPOWER_IPRO, THIRDPARTY_WGS84]);
 End;
 
 Procedure TfrmIMStart.FormDestroy(Sender: TObject);
@@ -324,13 +321,12 @@ Begin
     sTokenValue := Trim(FTokens.ValueFromIndex[i]);
 
     If sTokenName <> '' Then
-      Result := StringReplace(Result, '<' + sTokenName + '>',
-        sTokenValue, [rfReplaceAll, rfIgnoreCase]);
+      Result := StringReplace(Result, '<' + sTokenName + '>', sTokenValue,
+        [rfReplaceAll, rfIgnoreCase]);
   End;
 End;
 
-Function TfrmIMStart.ExtractExeAndParams(Const ALine: String;
-  out AExe, AParams: String): Boolean;
+Function TfrmIMStart.ExtractExeAndParams(Const ALine: String; out AExe, AParams: String): Boolean;
 Var
   s: String;
   P: SizeInt;

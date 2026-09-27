@@ -176,14 +176,14 @@ Begin
   Try
     {$IFDEF Windows}
     SetForegroundWindow(Handle);
-    {$ENDIF}
+{$ENDIF}
 
     GetCursorPos(P);
     pmShortcuts.Popup(P.X, P.Y);
 
     {$IFDEF Windows}
     PostMessage(Handle, WM_NULL, 0, 0);
-    {$ENDIF}
+{$ENDIF}
   Finally
     FMenuShowing := False;
   End;

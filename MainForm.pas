@@ -39,7 +39,7 @@ Interface
 Uses
   Classes, Contnrs, SysUtils, Forms, Controls, Menus, ExtCtrls, Dialogs,
   LazFileUtils
-  {$IFDEF Windows}, Windows{$ENDIF};
+  {$IFDEF Windows}, Windows{$ENDIF}, LMessages;
 
 Type
 
@@ -93,11 +93,13 @@ Type
 
     // Allow shortcut Icon to toggle disabled while loading...
     Procedure SetTrayIcon(AImageIndex: Integer);
-  Public
+  Protected
+    Procedure WndProc(Var TheMessage: TLMessage); Override;
   End;
 
 Var
   frmIMStart: TfrmIMStart;
+  WM_IMSTART_SHOW: UINT;
 
 Const
   ICON_TRAY_ENABLED = 11;
@@ -165,6 +167,21 @@ Begin
   FreeAndNil(FShortcutInfos);
 End;
 
+Procedure TfrmIMStart.WndProc(Var TheMessage: TLMessage);
+Begin
+  { TODO: This isn't working, but I'm out of time to investigate
+          I added a ShowMessage in the LPR, that's feedback enough for now }
+  If (WM_IMSTART_SHOW <> 0) And (TheMessage.Msg = WM_IMSTART_SHOW) Then
+  Begin
+    // TODO: Show popup menu instead of about
+    FormAbout.ShowAbout;
+    TheMessage.Result := 0;
+    Exit;
+  End;
+
+  Inherited WndProc(TheMessage);
+End;
+
 Procedure TfrmIMStart.TrayIconClick(Sender: TObject);
 Var
   P: TPoint;
@@ -176,14 +193,14 @@ Begin
   Try
     {$IFDEF Windows}
     SetForegroundWindow(Handle);
-{$ENDIF}
+    {$ENDIF}
 
     GetCursorPos(P);
     pmShortcuts.Popup(P.X, P.Y);
 
     {$IFDEF Windows}
     PostMessage(Handle, WM_NULL, 0, 0);
-{$ENDIF}
+    {$ENDIF}
   Finally
     FMenuShowing := False;
   End;
@@ -673,5 +690,8 @@ Procedure TfrmIMStart.ExitApp(Sender: TObject);
 Begin
   Application.Terminate;
 End;
+
+Initialization
+  WM_IMSTART_SHOW := RegisterWindowMessage('InspectorMike.IM_Start.Show');
 
 End.
